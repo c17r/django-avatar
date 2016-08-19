@@ -9,7 +9,7 @@
     {% else %}
         <form method="POST" action="{% url 'avatar_delete' %}">
             <ul>
-                {{ delete_avatar_form.as_ul }}
+                {{ form.as_ul }}
             </ul>
             <p>{% csrf_token %}<input type="submit" value="{% trans "Delete These" %}" /></p>
         </form>
