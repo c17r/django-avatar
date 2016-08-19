@@ -258,7 +258,35 @@ class AvatarTests(TestCase):
         self.assertIn('<img src="{}"'.format(avatar.avatar_url(100)), result)
         self.assertIn('alt="test" width="100" height="100" />', result)
 
-    # def testAvatarOrder
+    def test_default_add_template(self):
+        response = self.client.get(reverse('avatar_add'))
+        self.assertContains(response, 'Upload New Image')
+        self.assertNotContains(response, 'ALTERNATE ADD TEMPLATE')
+
+    def test_custom_add_template(self):
+        response = self.client.get(reverse('custom_add'))
+        self.assertNotContains(response, 'Upload New Image')
+        self.assertContains(response, 'ALTERNATE ADD TEMPLATE')
+
+    def test_default_change_template(self):
+        response = self.client.get(reverse('avatar_change'))
+        self.assertContains(response, 'Upload New Image')
+        self.assertNotContains(response, 'ALTERNATE CHANGE TEMPLATE')
+
+    def test_custom_change_template(self):
+        response = self.client.get(reverse('custom_change'))
+        self.assertNotContains(response, 'Upload New Image')
+        self.assertContains(response, 'ALTERNATE CHANGE TEMPLATE')
+
+    def test_default_delete_template(self):
+        response = self.client.get(reverse('avatar_delete'))
+        self.assertContains(response, 'like to delete.')
+        self.assertNotContains(response, 'ALTERNATE DELETE TEMPLATE')
+
+    def test_custom_delete_template(self):
+        response = self.client.get(reverse('custom_delete'))
+        self.assertNotContains(response, 'like to delete.')
+        self.assertContains(response, 'ALTERNATE DELETE TEMPLATE')    # def testAvatarOrder
     # def testReplaceAvatarWhenMaxIsOne
     # def testHashFileName
     # def testHashUserName
