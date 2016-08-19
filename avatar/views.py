@@ -65,6 +65,14 @@ class Base(mixins.LoginRequiredMixin, generic.FormView):
         if url:
             return url
 
+    def add_avatar(self, form):
+        avatar = Avatar(user=self.request.user, primary=True)
+        image_file = self.request.FILES['avatar']
+        avatar.avatar.save(image_file.name, image_file)
+        avatar.save()
+        messages.success(self.request, _("Successfully uploaded a new avatar."))
+        avatar_updated.send(sender=Avatar, user=self.request.user, avatar=avatar)
+
 
 def _get_next(request):
     """
@@ -108,33 +116,13 @@ def _get_avatars(user):
     return (avatar, avatars)
 
 
-@login_required
-def add(request, extra_context=None, next_override=None,
-        upload_form=UploadAvatarForm, *args, **kwargs):
-    if extra_context is None:
-        extra_context = {}
-    avatar, avatars = _get_avatars(request.user)
-    upload_avatar_form = upload_form(request.POST or None,
-                                     request.FILES or None,
-                                     user=request.user)
-    if request.method == "POST" and 'avatar' in request.FILES:
-        if upload_avatar_form.is_valid():
-            avatar = Avatar(user=request.user, primary=True)
-            image_file = request.FILES['avatar']
-            avatar.avatar.save(image_file.name, image_file)
-            avatar.save()
-            messages.success(request, _("Successfully uploaded a new avatar."))
-            avatar_updated.send(sender=Avatar, user=request.user, avatar=avatar)
-            return redirect(next_override or _get_next(request))
-    context = {
-        'avatar': avatar,
-        'avatars': avatars,
-        'upload_avatar_form': upload_avatar_form,
-        'next': next_override or _get_next(request),
-    }
-    context.update(extra_context)
-    template_name = settings.AVATAR_ADD_TEMPLATE or 'avatar/add.html'
-    return render(request, template_name, context)
+class Add(Base):
+    template_name = 'avatar/add.html'
+    form_class = UploadAvatarForm
+
+    def form_valid(self, form):
+        self.add_avatar(form)
+        return super(Add, self).form_valid(form)
 
 
 @login_required

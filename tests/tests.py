@@ -13,9 +13,9 @@ from avatar.templatetags import avatar_tags
 from PIL import Image
 
 
-def upload_helper(o, filename):
+def upload_helper(o, filename, url_name="avatar_add"):
     f = open(os.path.join(o.testdatapath, filename), "rb")
-    response = o.client.post(reverse('avatar_add'), {
+    response = o.client.post(reverse(url_name), {
         'avatar': f,
     }, follow=True)
     f.close()
@@ -47,38 +47,44 @@ class AvatarTests(TestCase):
     def test_non_image_upload(self):
         response = upload_helper(self, "nonimagefile")
         self.assertEqual(response.status_code, 200)
-        self.assertNotEqual(response.context['upload_avatar_form'].errors, {})
+        self.assertNotEqual(response.context['form'].errors, {})
 
     def test_normal_image_upload(self):
         response = upload_helper(self, "test.png")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.redirect_chain), 1)
-        self.assertEqual(response.context['upload_avatar_form'].errors, {})
+        self.assertEqual(response.context['form'].errors, {})
         avatar = get_primary_avatar(self.user)
         self.assertIsNotNone(avatar)
         self.assertEqual(avatar.user, self.user)
         self.assertTrue(avatar.primary)
+
+    def test_normal_upload_success_url(self):
+        response = upload_helper(self, "test.png", "success_url_add")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.redirect_chain), 1)
+        self.assertEqual(response.redirect_chain[0], (reverse("landing_page"), 302))
 
     def test_image_without_wrong_extension(self):
         # use with AVATAR_ALLOWED_FILE_EXTS = ('.jpg', '.png')
         response = upload_helper(self, "imagefilewithoutext")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.redirect_chain), 0)  # Redirect only if it worked
-        self.assertNotEqual(response.context['upload_avatar_form'].errors, {})
+        self.assertNotEqual(response.context['form'].errors, {})
 
     def test_image_with_wrong_extension(self):
         # use with AVATAR_ALLOWED_FILE_EXTS = ('.jpg', '.png')
         response = upload_helper(self, "imagefilewithwrongext.ogg")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.redirect_chain), 0)  # Redirect only if it worked
-        self.assertNotEqual(response.context['upload_avatar_form'].errors, {})
+        self.assertNotEqual(response.context['form'].errors, {})
 
     def test_image_too_big(self):
         # use with AVATAR_MAX_SIZE = 1024 * 1024
         response = upload_helper(self, "testbig.png")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.redirect_chain), 0)  # Redirect only if it worked
-        self.assertNotEqual(response.context['upload_avatar_form'].errors, {})
+        self.assertNotEqual(response.context['form'].errors, {})
 
     def test_default_url(self):
         response = self.client.get(reverse('avatar_render_primary', kwargs={
@@ -113,6 +119,15 @@ class AvatarTests(TestCase):
         for i in range(1, 10):
             self.test_normal_image_upload()
         count = Avatar.objects.filter(user=self.user, primary=True).count()
+        self.assertEqual(count, 1)
+
+    @override_settings(AVATAR_MAX_AVATARS_PER_USER=1)
+    def test_there_can_be_only_one_avatar(self):
+        for i in range(1, 10):
+            self.test_normal_image_upload()
+        count = Avatar.objects.filter(user=self.user, primary=True).count()
+        self.assertEqual(count, 1)
+        count = Avatar.objects.filter(user=self.user).count()
         self.assertEqual(count, 1)
 
     def test_delete_avatar(self):
@@ -169,7 +184,7 @@ class AvatarTests(TestCase):
         count_after = Avatar.objects.filter(user=self.user).count()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.redirect_chain), 0)  # Redirect only if it worked
-        self.assertNotEqual(response.context['upload_avatar_form'].errors, {})
+        self.assertNotEqual(response.context['form'].errors, {})
         self.assertEqual(count_before, count_after)
 
     @override_settings(AVATAR_THUMB_FORMAT='png')
