@@ -205,17 +205,20 @@ class Delete(Base):
         return super(Delete, self).form_valid(form)
 
 
-def render_primary(request, user=None, size=settings.AVATAR_DEFAULT_SIZE):
-    size = int(size)
-    avatar = get_primary_avatar(user, size=size)
-    if avatar:
-        # FIXME: later, add an option to render the resized avatar dynamically
-        # instead of redirecting to an already created static file. This could
-        # be useful in certain situations, particulary if there is a CDN and
-        # we want to minimize the storage usage on our static server, letting
-        # the CDN store those files instead
-        url = avatar.avatar_url(size)
-    else:
-        url = get_default_avatar_url()
+class RenderPrimary(generic.RedirectView):
+    def get_redirect_url(self, *args, **kwargs):
+        size = int(self.kwargs.get('size', settings.AVATAR_DEFAULT_SIZE))
+        user = self.kwargs.get('user')
 
-    return redirect(url)
+        avatar = get_primary_avatar(user, size=size)
+        if avatar:
+            # FIXME: later, add an option to render the resized avatar dynamically
+            # instead of redirecting to an already created static file. This could
+            # be useful in certain situations, particulary if there is a CDN and
+            # we want to minimize the storage usage on our static server, letting
+            # the CDN store those files instead
+            url = avatar.avatar_url(size)
+        else:
+            url = get_default_avatar_url()
+
+        return url
