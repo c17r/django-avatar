@@ -286,11 +286,9 @@ class AvatarTests(TestCase):
     def test_custom_delete_template(self):
         response = self.client.get(reverse('custom_delete'))
         self.assertNotContains(response, 'like to delete.')
-        self.assertContains(response, 'ALTERNATE DELETE TEMPLATE')    # def testAvatarOrder
-        response = self.client.get('/avatar/delete/')
-        self.assertNotContains(response, 'like to delete.')
-        self.assertContains(response, 'ALTERNATE DELETE TEMPLATE')
-    
+        self.assertContains(response, 'ALTERNATE DELETE TEMPLATE')    
+
+    # def testAvatarOrder
     # def testReplaceAvatarWhenMaxIsOne
     # def testHashFileName
     # def testHashUserName
