@@ -5,12 +5,65 @@ from django.utils.translation import ugettext as _
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 
+from django.contrib.auth import mixins
+from django.views import generic
+from django.utils.encoding import force_text
+
 from avatar.conf import settings
 from avatar.forms import PrimaryAvatarForm, DeleteAvatarForm, UploadAvatarForm
 from avatar.models import Avatar
 from avatar.signals import avatar_updated
 from avatar.utils import (get_primary_avatar, get_default_avatar_url,
                           invalidate_cache)
+
+
+class Base(mixins.LoginRequiredMixin, generic.FormView):
+    def get_avatars(self):
+        if hasattr(self, '_get_avatars'):
+            return self._get_avatars
+
+        avatars = self.request.user.avatar_set.all()
+        avatar = None
+
+        primary_avatar = avatars.order_by('-primary')[:1]
+        if primary_avatar:
+            avatar = primary_avatar[0]
+
+        if settings.AVATAR_MAX_AVATARS_PER_USER == 1:
+            avatars = primary_avatar
+        else:
+            avatars = avatars[:settings.AVATAR_MAX_AVATARS_PER_USER]
+
+        self._get_avatars = (avatar, avatars)
+        return self._get_avatars
+
+    def get_context_data(self, **kwargs):
+        avatar, avatars = self.get_avatars()
+        context = super(Base, self).get_context_data(**kwargs)
+        context.update({
+            'avatar': avatar,
+            'avatars': avatars
+        })
+        return context
+
+    def get_form_kwargs(self):
+        kwargs = super(Base, self).get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def get_success_url(self):
+        if self.success_url:
+            return force_text(self.success_url)
+
+        url = self.request.POST.get('next')
+        if not url:
+            url = self.request.GET.get('next')
+        if not url:
+            url = self.request.META.get('HTTP_REFERER')
+        if not url:
+            url = self.request.path
+        if url:
+            return url
 
 
 def _get_next(request):
@@ -125,40 +178,31 @@ def change(request, extra_context=None, next_override=None,
     return render(request, template_name, context)
 
 
-@login_required
-def delete(request, extra_context=None, next_override=None, *args, **kwargs):
-    if extra_context is None:
-        extra_context = {}
-    avatar, avatars = _get_avatars(request.user)
-    delete_avatar_form = DeleteAvatarForm(request.POST or None,
-                                          user=request.user,
-                                          avatars=avatars)
-    if request.method == 'POST':
-        if delete_avatar_form.is_valid():
-            ids = delete_avatar_form.cleaned_data['choices']
-            if six.text_type(avatar.id) in ids and avatars.count() > len(ids):
-                # Find the next best avatar, and set it as the new primary
-                for a in avatars:
-                    if six.text_type(a.id) not in ids:
-                        a.primary = True
-                        a.save()
-                        avatar_updated.send(sender=Avatar, user=request.user,
-                                            avatar=avatar)
-                        break
-            Avatar.objects.filter(id__in=ids).delete()
-            messages.success(request,
-                             _("Successfully deleted the requested avatars."))
-            return redirect(next_override or _get_next(request))
+class Delete(Base):
+    template_name = 'avatar/confirm_delete.html'
+    form_class = DeleteAvatarForm
 
-    context = {
-        'avatar': avatar,
-        'avatars': avatars,
-        'delete_avatar_form': delete_avatar_form,
-        'next': next_override or _get_next(request),
-    }
-    context.update(extra_context)
-    template_name = settings.AVATAR_DELETE_TEMPLATE or 'avatar/confirm_delete.html'
-    return render(request, template_name, context)
+    def get_form_kwargs(self):
+        _, avatars = self.get_avatars()
+        kwargs = super(Delete, self).get_form_kwargs()
+        kwargs['avatars'] = avatars
+        return kwargs
+
+    def form_valid(self, form):
+        avatar, avatars = self.get_avatars()
+        ids = form.cleaned_data['choices']
+        if six.text_type(avatar.id) in ids and avatars.count() > len(ids):
+            for a in avatars:
+                if six.text_type(a.id) not in ids:
+                    a.primary = True
+                    a.save()
+                    avatar_updated.send(sender=Avatar, user=self.request.user,
+                                        avatar=avatar)
+                    break
+        Avatar.objects.filter(id__in=ids).delete()
+        messages.success(self.request,
+                        _("Successfully deleted the requested avatars."))
+        return super(Delete, self).form_valid(form)
 
 
 def render_primary(request, user=None, size=settings.AVATAR_DEFAULT_SIZE):
