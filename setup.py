@@ -18,6 +18,21 @@ def find_version(*file_paths):
         return version_match.group(1)
     raise RuntimeError("Unable to find version string.")
 
+
+def create_reqs(data):
+    lines = [l.lstrip() for l in data.split('\n')]
+    needle = None
+    for idx, line in enumerate(lines):
+        if line == "# dev":
+            needle = idx
+            break
+    keeps = lines
+    if needle is not None:
+        keeps = lines[:needle]
+    keeps = [l for l in keeps if l and l[0] != '#']
+    return keeps
+
+
 setup(
     name='django-avatar',
     version=find_version("avatar", "__init__.py"),
@@ -59,9 +74,6 @@ setup(
             'media/avatar/img/default.jpg',
         ],
     },
-    install_requires=[
-        'Pillow>=2.0',
-        'django-appconf>=0.6',
-    ],
+    install_requires=create_reqs(read('requirements.txt')),
     zip_safe=False,
 )
