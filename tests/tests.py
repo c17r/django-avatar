@@ -92,6 +92,19 @@ class AvatarTests(TestCase):
         self.assertTrue(base_url in loc)
         self.assertTrue(loc.endswith(settings.AVATAR_DEFAULT_URL))
 
+    def test_get_primary(self):
+        self.test_there_can_be_only_one_primary_avatar()
+        primary = Avatar.objects.get(user=self.user, primary=True)
+
+        response = self.client.get(reverse('avatar_render_primary', kwargs={
+            'user': self.user.username,
+            'size': 80,
+        }))
+
+        loc = response['Location']
+        filename = os.path.basename(primary.avatar.name)
+        self.assertTrue(loc.endswith(filename))
+
     def test_non_existing_user(self):
         a = get_primary_avatar("nonexistinguser")
         self.assertEqual(a, None)
