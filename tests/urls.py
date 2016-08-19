@@ -9,5 +9,9 @@ urlpatterns = [
 
     url(r'^landing_page/$', generic.TemplateView.as_view(template_name='dummy/success.html'), name='landing_page'),
 
-    url(r'^success_url/add/$', views.Add.as_view(success_url=reverse_lazy('landing_page')), name='success_url_add'),
+    url(r'^custom/add/$', views.Add.as_view(template_name='alt/add.html'), name='custom_add'),
+    url(r'^custom/change/$', views.Change.as_view(template_name='alt/change.html'), name='custom_change'),
+    url(r'^custom/delete/$', views.Delete.as_view(template_name='alt/delete.html'), name='custom_delete'),
+
+    url(r'^success_url/add/$', views.Add.as_view(success_url=reverse_lazy('landing_page')), name='success_url_add'),    
 ]
