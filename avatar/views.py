@@ -1,9 +1,7 @@
-from django.shortcuts import render, redirect
 from django.utils import six
 from django.utils.translation import ugettext as _
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 
 from django.contrib.auth import mixins
 from django.views import generic
@@ -74,48 +72,6 @@ class Base(mixins.LoginRequiredMixin, generic.FormView):
         avatar_updated.send(sender=Avatar, user=self.request.user, avatar=avatar)
 
 
-def _get_next(request):
-    """
-    The part that's the least straightforward about views in this module is
-    how they determine their redirects after they have finished computation.
-
-    In short, they will try and determine the next place to go in the
-    following order:
-
-    1. If there is a variable named ``next`` in the *POST* parameters, the
-       view will redirect to that variable's value.
-    2. If there is a variable named ``next`` in the *GET* parameters,
-       the view will redirect to that variable's value.
-    3. If Django can determine the previous page from the HTTP headers,
-       the view will redirect to that previous page.
-    """
-    next = request.POST.get('next', request.GET.get('next',
-                            request.META.get('HTTP_REFERER', None)))
-    if not next:
-        next = request.path
-    return next
-
-
-def _get_avatars(user):
-    # Default set. Needs to be sliced, but that's it. Keep the natural order.
-    avatars = user.avatar_set.all()
-
-    # Current avatar
-    primary_avatar = avatars.order_by('-primary')[:1]
-    if primary_avatar:
-        avatar = primary_avatar[0]
-    else:
-        avatar = None
-
-    if settings.AVATAR_MAX_AVATARS_PER_USER == 1:
-        avatars = primary_avatar
-    else:
-        # Slice the default set now that we used
-        # the queryset for the primary avatar
-        avatars = avatars[:settings.AVATAR_MAX_AVATARS_PER_USER]
-    return (avatar, avatars)
-
-
 class Add(Base):
     template_name = 'avatar/add.html'
     form_class = UploadAvatarForm
@@ -125,45 +81,70 @@ class Add(Base):
         return super(Add, self).form_valid(form)
 
 
-@login_required
-def change(request, extra_context=None, next_override=None,
-           upload_form=UploadAvatarForm, primary_form=PrimaryAvatarForm,
-           *args, **kwargs):
-    if extra_context is None:
-        extra_context = {}
-    avatar, avatars = _get_avatars(request.user)
-    if avatar:
-        kwargs = {'initial': {'choice': avatar.id}}
-    else:
-        kwargs = {}
-    upload_avatar_form = upload_form(user=request.user, **kwargs)
-    primary_avatar_form = primary_form(request.POST or None,
-                                       user=request.user,
-                                       avatars=avatars, **kwargs)
-    if request.method == "POST":
-        updated = False
-        if 'choice' in request.POST and primary_avatar_form.is_valid():
-            avatar = Avatar.objects.get(
-                id=primary_avatar_form.cleaned_data['choice'])
+class Change(Base):
+    template_name = 'avatar/change.html'
+    form_class = PrimaryAvatarForm
+    upload_form_class = UploadAvatarForm
+
+    def get_context_data(self, **kwargs):
+        context = super(Change, self).get_context_data(**kwargs)
+        if 'upload_form' not in context:
+            context['upload_form'] = self.get_upload_form()
+        return context
+
+    def get_initial(self):
+        avatar, _ = self.get_avatars()
+        if avatar:
+            return {'choice': avatar.id}
+        return super(Change, self).get_initial()
+
+    def get_form_kwargs(self):
+        _, avatars = self.get_avatars()
+        kwargs = super(Change, self).get_form_kwargs()
+        kwargs['avatars'] = avatars
+        return kwargs
+
+    def get_upload_form(self):
+        kwargs = self.get_form_kwargs()
+        if 'avatars' in kwargs:
+            del kwargs['avatars']
+        return self.upload_form_class(**kwargs)
+
+    def is_valid(self, form, upload_form):
+        if 'choice' in self.request.POST:
+            if form.is_valid():
+                return True
+        if 'avatar' in self.request.FILES:
+            if upload_form.is_valid():
+                return True
+        return False
+
+    def post(self, request, *args, **kwargs):
+        form = self.get_form()
+        upload_form = self.get_upload_form()
+        if self.is_valid(form, upload_form):
+            return self.form_valid(form, upload_form)
+        else:
+            return self.form_invalid(form=form, upload_form=upload_form)
+
+    def form_invalid(self, **kwargs):
+        return self.render_to_response(self.get_context_data(**kwargs))
+
+    def form_valid(self, form, upload_form):
+        if 'choice' in self.request.POST and form.is_valid():
+            a_id = form.cleaned_data['choice']
+            avatar = Avatar.objects.get(id=a_id)
             avatar.primary = True
             avatar.save()
-            updated = True
-            invalidate_cache(request.user)
-            messages.success(request, _("Successfully updated your avatar."))
-        if updated:
-            avatar_updated.send(sender=Avatar, user=request.user, avatar=avatar)
-        return redirect(next_override or _get_next(request))
+            invalidate_cache(self.request.user)
+            messages.success(self.request, _("Successfully updated your avatar."))
+            avatar_updated.send(sender=Avatar, user=self.request.user,
+                                avatar=avatar)
 
-    context = {
-        'avatar': avatar,
-        'avatars': avatars,
-        'upload_avatar_form': upload_avatar_form,
-        'primary_avatar_form': primary_avatar_form,
-        'next': next_override or _get_next(request)
-    }
-    context.update(extra_context)
-    template_name = settings.AVATAR_CHANGE_TEMPLATE or 'avatar/change.html'
-    return render(request, template_name, context)
+        if 'avatar' in self.request.FILES and upload_form.is_valid():
+            self.add_avatar(upload_form)
+
+        return super(Change, self).form_valid(form)
 
 
 class Delete(Base):
