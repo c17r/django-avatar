@@ -13,6 +13,6 @@ publish: clean
 	twine upload dist/*
 
 clean:
-	rm -vrf ./build ./dist ./*.egg-info
+	rm -vrf ./build ./dist ./*.egg-info ./avatars
 	find . -name '*.pyc' -delete
 	find . -name '*.tgz' -delete
