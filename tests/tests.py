@@ -13,11 +13,11 @@ from avatar.templatetags import avatar_tags
 from PIL import Image
 
 
-def upload_helper(o, filename, url_name="avatar_add"):
+def upload_helper(o, filename, url_name="avatar_add", follow=True):
     f = open(os.path.join(o.testdatapath, filename), "rb")
     response = o.client.post(reverse(url_name), {
         'avatar': f,
-    }, follow=True)
+    }, follow=follow)
     f.close()
     return response
 
@@ -175,6 +175,26 @@ class AvatarTests(TestCase):
         self.assertEqual(new_primary.pk, choice.pk)
         # Avatar with old primary pk exists but it is not primary anymore
         self.assertTrue(Avatar.objects.filter(user=self.user, pk=old_primary.pk, primary=False).exists())
+
+    def test_change_avatar_upload_new(self):
+        self.test_there_can_be_only_one_primary_avatar()
+        old_primary = Avatar.objects.get(user=self.user, primary=True)
+        response = upload_helper(self, "test.png", "avatar_change", False)
+
+        self.assertEqual(response.status_code, 302)
+        # Avatar with old primary pk exists but it is not primary anymore
+        self.assertTrue(Avatar.objects.filter(user=self.user, pk=old_primary.pk, primary=False).exists())
+
+    def test_change_avatar_invalid_data(self):
+        self.test_there_can_be_only_one_primary_avatar()
+        response = self.client.post(reverse('avatar_change'), {
+            'choice': ''
+        })
+        self.assertEqual(response.status_code, 200)
+        form = response.context['form']
+        self.assertEqual(form.errors, {
+            'choice': ['This field is required.']
+            })
 
     def test_too_many_avatars(self):
         for i in range(0, settings.AVATAR_MAX_AVATARS_PER_USER):
