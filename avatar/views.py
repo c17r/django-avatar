@@ -16,6 +16,9 @@ from avatar.utils import (get_primary_avatar, get_default_avatar_url,
 
 
 class Base(mixins.LoginRequiredMixin, generic.FormView):
+    extra_context = None
+    next_override = None
+
     def get_avatars(self):
         if hasattr(self, '_get_avatars'):
             return self._get_avatars
@@ -42,6 +45,9 @@ class Base(mixins.LoginRequiredMixin, generic.FormView):
             'avatar': avatar,
             'avatars': avatars
         })
+        if self.extra_context:
+            context.update(self.extra_context)
+
         return context
 
     def get_form_kwargs(self):
@@ -50,6 +56,9 @@ class Base(mixins.LoginRequiredMixin, generic.FormView):
         return kwargs
 
     def get_success_url(self):
+        if self.next_override:
+            return self.next_override
+
         if self.success_url:
             return force_text(self.success_url)
 
